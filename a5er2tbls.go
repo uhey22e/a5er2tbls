@@ -2,44 +2,40 @@ package a5er2tbls
 
 import (
 	"bufio"
-	"bytes"
-	"io"
 	"os"
 	"regexp"
 
 	"github.com/k1LoW/tbls/config"
 )
 
-func a5erSectionToTblsRelation(section io.Reader) config.AdditionalRelation {
+func a5erSectionToTblsRelation(section []string) config.AdditionalRelation {
 	conf := config.AdditionalRelation{}
-	rt, _ := regexp.Compile(`^Entity2=`)
-	rpt, _ := regexp.Compile(`^Entity1=`)
-	rc, _ := regexp.Compile(`^Fields2=`)
-	rpc, _ := regexp.Compile(`^Fields1=`)
-	sc := bufio.NewScanner(section)
-	for sc.Scan() {
-		b := sc.Bytes()
-		if lrt := len(rt.Find(b)); lrt > 0 {
-			conf.Table = string(b[lrt:])
+	rt, _ := regexp.Compile(`^Entity2=(.*)$`)
+	rpt, _ := regexp.Compile(`^Entity1=(.*)$`)
+	rc, _ := regexp.Compile(`^Fields2=(.*)$`)
+	rpc, _ := regexp.Compile(`^Fields1=(.*)$`)
+	for _, l := range section {
+		if v := rt.FindStringSubmatch(l); v != nil && len(v) == 2 {
+			conf.Table = v[1]
 			continue
 		}
-		if lrpt := len(rpt.Find(b)); lrpt > 0 {
-			conf.ParentTable = string(b[lrpt:])
+		if v := rpt.FindStringSubmatch(l); v != nil && len(v) == 2 {
+			conf.ParentTable = v[1]
 			continue
 		}
-		if lrc := len(rc.Find(b)); lrc > 0 {
-			conf.Columns = append(conf.Columns, string(b[lrc:]))
+		if v := rc.FindStringSubmatch(l); v != nil && len(v) == 2 {
+			conf.Columns = append(conf.Columns, v[1])
 			continue
 		}
-		if lrpc := len(rpc.Find(b)); lrpc > 0 {
-			conf.ParentColumns = append(conf.Columns, string(b[lrpc:]))
+		if v := rpc.FindStringSubmatch(l); v != nil && len(v) == 2 {
+			conf.ParentColumns = append(conf.ParentColumns, v[1])
 			continue
 		}
 	}
 	return conf
 }
 
-func splitA5erFile(filename string) ([]*bytes.Buffer, error) {
+func splitA5erFile(filename string) ([][]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
@@ -50,39 +46,37 @@ func splitA5erFile(filename string) ([]*bytes.Buffer, error) {
 
 	// The .a5er file is composed of sections; "Relation", "Entity"...
 	// Load every "Relation" sections into buffer
-	sections := make([]*bytes.Buffer, 0, 32)
+	sections := make([][]string, 0, 32)
+	var buf []string
 	st := 0
-	buf := bytes.NewBuffer(make([]byte, 512))
 	sc := bufio.NewScanner(file)
 	for sc.Scan() {
-		b := sc.Bytes()
-		if st == 0 && rh.Match(b) {
+		scb := sc.Bytes()
+		if st == 0 && rh.Match(scb) {
 			st = 1
+			buf = make([]string, 0, 32)
 		}
 		if st == 1 {
-			buf.Write(b)
-			buf.WriteString("\n")
+			buf = append(buf, sc.Text())
 		}
-		if st == 1 && rt.Match(b) {
+		if st == 1 && rt.Match(scb) {
+			sections = append(sections, buf)
+			buf = nil
 			st = 0
-			sections = append(sections, bytes.NewBuffer(make([]byte, buf.Len())))
-			buf.WriteTo(sections[len(sections)-1])
-			buf.Reset()
 		}
 	}
 	if st == 1 {
-		sections = append(sections, bytes.NewBuffer(make([]byte, buf.Len())))
-		buf.WriteTo(sections[len(sections)-1])
+		sections = append(sections, buf)
 	}
 
 	return sections, nil
 }
 
 // ParseRelations read the a5er file and get relationships as the tbls setting struct.
-func ParseRelations(filename string) []config.AdditionalRelation {
+func ParseRelations(filename string) ([]config.AdditionalRelation, error) {
 	sections, err := splitA5erFile(filename)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	confs := make([]config.AdditionalRelation, len(sections))
@@ -90,5 +84,5 @@ func ParseRelations(filename string) []config.AdditionalRelation {
 		confs[i] = a5erSectionToTblsRelation(s)
 	}
 
-	return confs
+	return confs, nil
 }

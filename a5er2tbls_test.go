@@ -2,23 +2,22 @@ package a5er2tbls
 
 import (
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
 func TestA5erSectionToTblsRelation(t *testing.T) {
-	data := strings.NewReader(`
-[Relation]
-Entity1=user
-Entity2=post
-RelationType1=2
-RelationType2=3
-Fields1=user_id
-Fields2=author_user_id
-Cardinarity1=
-Cardinarity2=
+	data := []string{
+		"[Relation]",
+		"Entity1=user",
+		"Entity2=post",
+		"RelationType1=2",
+		"RelationType2=3",
+		"Fields1=user_id",
+		"Fields2=author_user_id",
+		"Cardinarity1=",
+		"Cardinarity2=",
+	}
 
-`)
 	res := a5erSectionToTblsRelation(data)
 	t.Log(res)
 
@@ -47,6 +46,13 @@ func TestSplitA5erFile(t *testing.T) {
 	}
 
 	for _, s := range sections {
-		t.Log(s.String())
+		t.Log(s)
+	}
+}
+
+func BenchmarkParseRelations(b *testing.B) {
+	file := filepath.Join("testdata", "erd.a5er")
+	for i := 0; i < b.N; i++ {
+		ParseRelations(file)
 	}
 }
